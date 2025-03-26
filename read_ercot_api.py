@@ -19,9 +19,9 @@ import time
 # assign your username, password, and subscription key as strings
 # to the variables described below
 
-USERNAME = "yourusername@email.com" # your username (email)
-PASSWORD = "yourpassword" # your password
-SUBSCRIPTION_KEY = "yoursubscriptionkey" # your subscription key
+USERNAME = "your username"
+PASSWORD = "your password"
+SUBSCRIPTION_KEY = "your subscription key"
 
 # keep this auth_url as it appears here
 AUTH_URL = "https://ercotb2c.b2clogin.com/ercotb2c.onmicrosoft.com/B2C_1_PUBAPI-ROPC-FLOW/oauth2/v2.0/token\
@@ -43,11 +43,12 @@ access_token = auth_response.json().get("access_token")
 emil_code = 'np6-787-cd'
 headers = {"Authorization": "Bearer " + access_token, "Ocp-Apim-Subscription-Key": SUBSCRIPTION_KEY}
 response = requests.get('https://api.ercot.com/api/public-reports/archive/' + emil_code, headers=headers)
-
+print(response.status_code)
 # use metadata from first request to find the number of pages
 # you need to make a new request for each page
 all_vals = response.json()
 num_pages = all_vals['_meta']['totalPages']
+print(num_pages)
 file_read_failure = [] # for keeping track of any file names that do not download
 
 # create directory to store downloaded data files
@@ -55,9 +56,9 @@ output_dir = 'ercot'
 os.makedirs(output_dir, exist_ok = True)
 
 # loop through all the pages in the archive
-for page_no in range(0, num_pages):
+for page_no in range(1000, 1100):
   # for each page, make a new request to the API
-  response = requests.get('https://api.ercot.com/api/public-reports/archive/np6-787-cd', headers=headers, params = {'page':2})
+  response = requests.get('https://api.ercot.com/api/public-reports/archive/np6-787-cd', headers=headers, params = {'page':page_no})
   # get list of files associated with your EMIL code (data type)
   all_vals = response.json() # get response as dictionary
   # get list of all files on this 'page' (1000 files per page)
@@ -69,6 +70,20 @@ for page_no in range(0, num_pages):
     filename = list_of_files[file_no]['_links']['endpoint']['href']
     # call API for individual file
     response2 = requests.get(filename, headers=headers)
+    print(response2.status_code)
+    if response2.status_code == 429:
+      # if you get rate limited, wait 30 seconds then 
+      # make a new request
+      time.sleep(2) # wait 30 seconds
+      response2 = requests.get(filename, headers=headers)
+    elif response2.status_code == 401:
+      auth_response = requests.post(AUTH_URL.format(username = USERNAME, password=PASSWORD))
+      # This will give you an access token associated with your account
+      access_token = auth_response.json().get("access_token")
+      headers = {"Authorization": "Bearer " + access_token, "Ocp-Apim-Subscription-Key": SUBSCRIPTION_KEY}
+      time.sleep(2) # wait 30 seconds
+      response2 = requests.get(filename, headers=headers)
+ 
     # if file exists, unzip
     file_found = True
     try:
@@ -87,4 +102,4 @@ for page_no in range(0, num_pages):
       with open('file_read_errors.txt', 'w') as file:
         for item in file_read_failure:
           file.write(f"{item}\n")
-    time.sleep(2) # suspend execution for 2 secs to avoid rate limit
+    time.sleep(2) # wait 30 seconds
